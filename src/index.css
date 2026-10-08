@@ -241,6 +241,19 @@ html.fix-selection ::selection {
   animation: speckPulse 2.2s ease-in-out infinite;
 }
 
+@keyframes bugWiggle {
+  25% {
+    transform: rotate(-12deg);
+  }
+  75% {
+    transform: rotate(12deg);
+  }
+}
+.bug-wiggle {
+  display: inline-block;
+  animation: bugWiggle 0.35s ease-in-out infinite;
+}
+
 @keyframes bubbleIn {
   from {
     opacity: 0;

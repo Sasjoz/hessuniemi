@@ -4,7 +4,8 @@ import { fmt, fmtDec } from './game/format';
 import { perfection } from './game/meta';
 import { bossUnlocked, bug, game, levelOf, prestigeName, useGame, xpOf } from './game/store';
 import { ComboBar, Chatbox, EventCard, Hero, mg, ProblemCard } from './components/Main';
-import { BossDefeated, ClanBubble, LevelUp, MinimalModal, OfflineModal, Speck, Toasts } from './components/Overlays';
+import { RoamingBug } from './components/Minigames';
+import { BossDefeated, ClanBubble, LevelUp, MinimalModal, OfflineModal, ResetModal, Speck, Toasts } from './components/Overlays';
 import { AchievementsPanel, BossPanel, PerfectionPanel, PrestigePanel, ProducersPanel, SettingsPanel, UpgradesPanel, VERSION } from './components/Panels';
 
 let started = false;
@@ -139,18 +140,25 @@ export default function App() {
 
       <footer className={`mt-8 flex flex-wrap items-center justify-between gap-2 text-[11px] text-faint ${mg('version')}`}>
         <span>Hessuniemi: Pienet Yksityiskohdat · v{bug(s, 'version') ? '0.9.1' : VERSION}</span>
-        <span>
-          Kermaperseet · {fmt(s.stats.fixes)} ongelmaa korjattu · "Ihan hyvä näin." — ei kukaan tässä klaanissa
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span>
+            Kermaperseet · {fmt(s.stats.fixes)} ongelmaa korjattu · "Ihan hyvä näin." — ei kukaan tässä klaanissa
+          </span>
+          <button className="text-faint underline-offset-2 hover:text-bad hover:underline" onClick={() => game.setResetOpen(true)}>
+            Nollaa peli
+          </button>
         </span>
       </footer>
 
       <Speck />
+      <RoamingBug />
       <ClanBubble />
       <Toasts />
       <MinimalModal />
       <OfflineModal />
       <LevelUp />
       <BossDefeated />
+      <ResetModal />
     </div>
   );
 }

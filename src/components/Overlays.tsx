@@ -68,6 +68,39 @@ export function OfflineModal() {
   );
 }
 
+export function ResetModal() {
+  const g = useGame();
+  if (!g.resetOpen) return null;
+  const s = g.s;
+  return (
+    <Modal>
+      <div className="text-xs font-bold uppercase tracking-[0.2em] text-bad">Nollaa peli</div>
+      <h3 className="mt-2 text-xl font-bold">Aloitetaanko kokonaan alusta?</h3>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        Kaikki poistetaan: <span className="num text-ink">{fmt(s.nitpicks)}</span> Nitpickiä, tuotanto, parannukset,{' '}
+        <span className="num text-ink">{s.achievements.length}</span> saavutusta, {s.metaFixed.length} korjattua pelin omaa virhettä ja{' '}
+        <span className="num text-ink">{fmt(s.pp)}</span> Perfektiopistettä. Tätä ei voi perua.
+      </p>
+      <p className="mt-2 text-xs text-faint">Voit ottaa varmuuskopion ensin: Asetukset → Vie tallennus.</p>
+      <p className="mt-3 text-sm italic text-muted">Hessuniemi ei unohda. Mutta peli unohtaa.</p>
+      <div className="mt-6 flex justify-end gap-2">
+        <button className="btn btn-ghost" onClick={() => game.setResetOpen(false)}>
+          Peru
+        </button>
+        <button
+          className="btn border border-bad/60 bg-bad/20 text-bad hover:bg-bad/30"
+          onClick={() => {
+            game.hardReset();
+            game.setResetOpen(false);
+          }}
+        >
+          NOLLAA PELI
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 const HINTS: Record<string, string> = {
   width: 'Vihje: leveys.',
   height: 'Vihje: korkeus.',

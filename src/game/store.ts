@@ -16,7 +16,8 @@ import {
   TIER_BASE_REWARD,
 } from './problems';
 import { maxAffordable, PRODUCER_BY_ID, PRODUCERS, producerCost } from './producers';
-import type { BossState, GameEvent, GameState, LogEntry, MinimalDiff, MinimalOption, Problem, Stats } from './types';
+import { makeOrder, makeTypo, ODD_AMOUNTS, ODD_ICONS, TYPO_SENTENCES } from './minigames';
+import type { BossState, GameEvent, GameState, LogEntry, MinimalDiff, MinimalOption, OddMode, Problem, Stats } from './types';
 import { UPGRADE_BY_ID, UPGRADES, type UpgradeKind } from './upgrades';
 
 const SAVE_KEY = 'hessuniemi-save-v1';
@@ -57,6 +58,7 @@ function emptyStats(): Stats {
     fixes: 0, manualFixes: 0, autoFixes: 0, pxFixes: 0, removed: 0, absurd: 0, hidden: 0, moves: 0,
     pieni: 0, minimal: 0, minimalWrong: 0, clan: 0, debtFixed: 0, regress: 0, avatarClicks: 0,
     exported: 0, maxOffline: 0, bestCombo: 0, comboBreaks: 0, bossDefeats: 0, metaFound: 0, playSeconds: 0,
+    bugs: 0, odd: 0, aligned: 0, ordered: 0, typos: 0,
   };
 }
 
@@ -388,6 +390,12 @@ class Game {
   levelUp: { level: number; t: number } | null = null;
   bossTaunt: { text: string; t: number } | null = null;
   savedFlash = 0;
+  resetOpen = false;
+
+  setResetOpen(open: boolean) {
+    this.resetOpen = open;
+    this.emit();
+  }
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -678,7 +686,7 @@ class Game {
   // ----- tapahtumat -----
   private scheduleEvent() {
     const s = this.s;
-    let delay = rand(45, 95) * 1000;
+    let delay = rand(35, 75) * 1000;
     if (s.prestigeLevel >= 3) delay *= 0.7;
     s.nextEventAt = Date.now() + delay;
   }
@@ -686,11 +694,15 @@ class Game {
   private spawnEvent() {
     const s = this.s;
     const now = Date.now();
+    const early = s.runEarned >= 2_000 || s.prestigeLevel > 0;
     const opts: [string, number][] = [
-      ['pieni', s.prestigeLevel >= 3 ? 50 : 35],
-      ['move', 35],
+      ['pieni', s.prestigeLevel >= 3 ? 30 : 20],
+      ['move', 20],
+      ['bug', 20],
+      ['odd', 20],
     ];
-    if (s.runEarned >= 5_000 || s.prestigeLevel > 0) opts.push(['minimal', 30]);
+    if (early) opts.push(['align', 15], ['order', 15], ['typo', 15]);
+    if (s.runEarned >= 5_000 || s.prestigeLevel > 0) opts.push(['minimal', 15]);
     const total = opts.reduce((a, o) => a + o[1], 0);
     let r = Math.random() * total;
     let type = opts[0][0];
@@ -707,11 +719,183 @@ class Game {
       const m = pick(MOVE_THINGS);
       s.event = { type: 'move', thing: m.thing, axis: m.axis, step: 0, length: 2 + Math.floor(Math.random() * 4), offset: 0, startedAt: now, key: `move:${m.thing}` };
       this.speak('Voitaisiinko…');
+    } else if (type === 'bug') {
+      s.event = { type: 'bug', x: rand(10, 85), y: rand(15, 80), nextMoveAt: now + 1200, flees: 0, difficulty: this.miniDifficulty(s.stats.bugs), startedAt: now };
+      this.speak('Bugi. Tuossa. Ei, tuossa.');
+      this.log('event', '🐛 Pakeneva bugi havaittu.');
+    } else if (type === 'odd') {
+      this.spawnOdd();
+    } else if (type === 'align') {
+      const mag = 2 + Math.floor(Math.random() * 7);
+      s.event = { type: 'align', offset: Math.random() < 0.5 ? -mag : mag, misses: 0, startedAt: now };
+      this.speak('Tämä ei ole linjassa.');
+    } else if (type === 'order') {
+      s.event = { type: 'order', ...makeOrder(this.miniDifficulty(s.stats.ordered)), progress: 0, misses: 0, flash: 0, startedAt: now };
+      this.speak('Tämä järjestys ei ole järjestys.');
+    } else if (type === 'typo') {
+      s.event = { type: 'typo', ...makeTypo(pick(TYPO_SENTENCES)), wrong: [], startedAt: now };
+      this.speak('Tässä lauseessa on virhe.');
     } else {
       this.spawnMinimal();
       return;
     }
     audio.play('event');
+  }
+
+  /** Minipelien vaikeus kasvaa onnistumisten ja prestige-tason mukaan (0–5). */
+  private miniDifficulty(wins: number): number {
+    return Math.min(5, Math.floor(wins / 3) + this.s.prestigeLevel);
+  }
+
+  private spawnOdd() {
+    const s = this.s;
+    const d = this.miniDifficulty(s.stats.odd);
+    const modes: OddMode[] = ['rotate', 'scale', 'offset', 'mirror', 'shade'];
+    const mode = pick(modes);
+    const count = [12, 16, 20, 24, 30, 36][d];
+    const cols = [4, 4, 5, 6, 6, 6][d];
+    // Peilauksen huomaa vain epäsymmetrisestä ikonista
+    const icon = mode === 'mirror' ? pick(['🔎', '🐉', '💬', '🐛']) : pick(ODD_ICONS);
+    s.event = { type: 'odd', mode, icon, count, cols, correct: Math.floor(Math.random() * count), amount: ODD_AMOUNTS[mode][d], wrong: [], startedAt: Date.now() };
+    this.speak('Mikä on erilainen?');
+  }
+
+  /** Yhteinen lopetus minipeleille. */
+  private finishMini(ok: boolean, seconds: number, title: string, text: string) {
+    const s = this.s;
+    s.event = null;
+    this.scheduleEvent();
+    if (ok) {
+      const reward = 150 + prodNoCombo(s) * seconds;
+      this.earn(reward);
+      this.toast('good', '✓', title, `${text} +${fmt(reward)} Nitpickiä`);
+      this.log('event', `${title} +${fmt(reward)}`);
+      audio.play('correct');
+    } else {
+      this.toast('bad', '…', title, text);
+      this.log('event', title);
+      audio.play('combobreak');
+    }
+  }
+
+  // ----- Pakeneva bugi -----
+  private moveBug(e: Extract<GameEvent, { type: 'bug' }>) {
+    let nx = e.x, ny = e.y;
+    // Hyppää selvästi kauemmas edellisestä paikasta
+    for (let i = 0; i < 6 && Math.hypot(nx - e.x, ny - e.y) < 25; i++) {
+      nx = rand(6, 90);
+      ny = rand(12, 86);
+    }
+    e.x = nx;
+    e.y = ny;
+    e.nextMoveAt = Date.now() + Math.max(450, 1300 - e.difficulty * 160);
+  }
+
+  bugFlee() {
+    const e = this.s.event;
+    if (e?.type !== 'bug') return;
+    if (Math.random() < 0.25 + e.difficulty * 0.1) {
+      e.flees++;
+      this.moveBug(e);
+      audio.play('move');
+      this.emit();
+    }
+  }
+
+  catchBug() {
+    const s = this.s;
+    if (s.event?.type !== 'bug') return;
+    s.stats.bugs++;
+    this.speak(pick(['Sain sen.', 'Ei enää.', 'Korjattu. Ennen tuotantoa.']));
+    this.finishMini(true, 40, '🐛 Bugi kiinni', 'Se ei päässyt tuotantoon.');
+    this.emit();
+  }
+
+  // ----- Mikä on erilainen? -----
+  selectOdd(i: number) {
+    const s = this.s;
+    const e = s.event;
+    if (e?.type !== 'odd') return;
+    if (i === e.correct) {
+      s.stats.odd++;
+      this.speak('Tuo. Selvästi.');
+      this.finishMini(true, 45, '✓ Löysit erilaisen', 'Hessuniemi nyökkää. Hieman.');
+    } else if (!e.wrong.includes(i)) {
+      e.wrong.push(i);
+      audio.play('wrong');
+      this.speak(pick(['Ei.', 'Se on täsmälleen samanlainen.', 'Katso tarkemmin.']));
+      if (e.wrong.length >= 3) this.finishMini(false, 0, 'Liian monta arvausta.', 'Hessuniemi osoitti oikean. Sanaakaan sanomatta.');
+    }
+    this.emit();
+  }
+
+  // ----- Kohdistus -----
+  nudgeAlign(dir: number) {
+    const e = this.s.event;
+    if (e?.type !== 'align') return;
+    e.offset += dir;
+    audio.play('detect');
+    this.emit();
+  }
+
+  acceptAlign() {
+    const s = this.s;
+    const e = s.event;
+    if (e?.type !== 'align') return;
+    if (e.offset === 0) {
+      s.stats.aligned++;
+      s.stats.pxFixes++;
+      this.speak('Nyt se on linjassa.');
+      this.finishMini(true, 30, '📐 Kohdistettu', 'Täsmälleen 0 px.');
+    } else {
+      e.misses++;
+      audio.play('wrong');
+      this.speak(Math.abs(e.offset) === 1 ? 'Vielä 1 px.' : 'Ei. Vielä vähän.');
+      if (e.misses >= 3) this.finishMini(false, 0, 'Hessuniemi kohdisti sen itse.', `Se oli ${Math.abs(e.offset)} px pielessä.`);
+    }
+    this.emit();
+  }
+
+  // ----- Järjestäminen -----
+  pickOrder(item: string) {
+    const s = this.s;
+    const e = s.event;
+    if (e?.type !== 'order') return;
+    if (e.solution[e.progress] === item) {
+      e.progress++;
+      audio.play('detect');
+      if (e.progress >= e.solution.length) {
+        s.stats.ordered++;
+        this.speak('Järjestyksessä. Toistaiseksi.');
+        this.finishMini(true, 50, e.mode === 'alpha' ? '💬 Kanavat järjestetty' : '📈 XP-dropit järjestetty', 'Joku siirtää ne kuitenkin huomenna.');
+      }
+    } else {
+      e.misses++;
+      e.progress = 0;
+      e.flash = Date.now();
+      audio.play('wrong');
+      this.speak('Ei. Alusta.');
+      if (e.misses >= 4) this.finishMini(false, 0, 'Järjestys jäi kesken.', 'Kanavat ovat edelleen väärässä järjestyksessä. Kaikki tietävät.');
+    }
+    this.emit();
+  }
+
+  // ----- Kirjoitusvirhe -----
+  selectTypo(i: number) {
+    const s = this.s;
+    const e = s.event;
+    if (e?.type !== 'typo') return;
+    if (i === e.typoIndex) {
+      s.stats.typos++;
+      this.speak(`"${e.correctWord}". Noin.`);
+      this.finishMini(true, 35, '✍️ Kirjoitusvirhe korjattu', `"${e.words[i]}" → "${e.correctWord}".`);
+    } else if (!e.wrong.includes(i)) {
+      e.wrong.push(i);
+      audio.play('wrong');
+      this.speak('Tuo on kirjoitettu oikein.');
+      if (e.wrong.length >= 3) this.finishMini(false, 0, 'Kirjoitusvirhe jäi.', `Se oli "${e.words[e.typoIndex]}".`);
+    }
+    this.emit();
   }
 
   private spawnMinimal() {
@@ -1094,6 +1278,13 @@ class Game {
         this.speak('Ei mitään. Unohda. En unohda.');
       }
       if (e.type === 'move' && age > 60_000) this.dismissMove();
+      if (e.type === 'bug') {
+        if (age > 15_000) this.finishMini(false, 0, '🐛 Bugi pakeni.', 'Se on nyt tuotannossa. Hessuniemi tietää missä.');
+        else if (now >= e.nextMoveAt) this.moveBug(e);
+      }
+      if ((e.type === 'odd' || e.type === 'align' || e.type === 'order' || e.type === 'typo') && age > 45_000) {
+        this.finishMini(false, 0, 'Aika loppui.', 'Hessuniemi korjasi sen itse. Huokaisten.');
+      }
     }
 
     // Clan chat -kupla

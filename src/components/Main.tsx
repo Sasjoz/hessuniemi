@@ -17,6 +17,7 @@ import {
   xpOf,
 } from '../game/store';
 import { Avatar } from './Avatar';
+import { MiniGameCard } from './Minigames';
 
 export function activeMeta(): string | null {
   const s = game.s;
@@ -237,6 +238,7 @@ export function EventCard() {
   const s = g.s;
   const e = s.event;
   if (!e || e.type === 'minimal') return null;
+  if (e.type !== 'pieni' && e.type !== 'move') return <MiniGameCard e={e} />;
   const radius = bug(s, 'radius') ? 9 : 12;
 
   if (e.type === 'pieni') {

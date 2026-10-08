@@ -21,7 +21,14 @@ export interface MinimalOption {
 export type GameEvent =
   | { type: 'pieni'; stage: 'teaser' | 'revealed'; text: string; startedAt: number }
   | { type: 'minimal'; options: MinimalOption[]; correct: number; startedAt: number; wrong: number[]; label: string }
-  | { type: 'move'; thing: string; axis: 'v' | 'h'; step: number; length: number; offset: number; startedAt: number; key: string };
+  | { type: 'move'; thing: string; axis: 'v' | 'h'; step: number; length: number; offset: number; startedAt: number; key: string }
+  | { type: 'bug'; x: number; y: number; nextMoveAt: number; flees: number; difficulty: number; startedAt: number }
+  | { type: 'odd'; mode: OddMode; icon: string; count: number; cols: number; correct: number; amount: number; wrong: number[]; startedAt: number }
+  | { type: 'align'; offset: number; misses: number; startedAt: number }
+  | { type: 'order'; mode: 'alpha' | 'num'; items: string[]; solution: string[]; progress: number; misses: number; flash: number; startedAt: number }
+  | { type: 'typo'; words: string[]; typoIndex: number; correctWord: string; wrong: number[]; startedAt: number };
+
+export type OddMode = 'rotate' | 'scale' | 'offset' | 'mirror' | 'shade';
 
 export interface Bubble {
   x: number;
@@ -94,6 +101,11 @@ export interface Stats {
   bossDefeats: number;
   metaFound: number;
   playSeconds: number;
+  bugs: number;
+  odd: number;
+  aligned: number;
+  ordered: number;
+  typos: number;
 }
 
 export interface GameState {

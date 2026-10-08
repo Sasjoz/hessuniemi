@@ -525,7 +525,6 @@ export function SettingsPanel() {
   const [mode, setMode] = useState<'none' | 'export' | 'import'>('none');
   const [text, setText] = useState('');
   const [msg, setMsg] = useState('');
-  const [resetStep, setResetStep] = useState(0);
   const lower = bug(s, 'settings-case');
 
   const stats: [string, string][] = [
@@ -575,19 +574,8 @@ export function SettingsPanel() {
         >
           📥 {lower ? 'tuo tallennus' : 'Tuo tallennus'}
         </button>
-        <button
-          className={`btn btn-sm ${resetStep ? 'border border-bad/50 bg-bad/15 text-bad' : 'btn-ghost'}`}
-          onClick={() => {
-            if (resetStep < 2) setResetStep(resetStep + 1);
-            else {
-              game.hardReset();
-              setResetStep(0);
-              setMsg('Nollattu.');
-            }
-          }}
-          onBlur={() => setResetStep(0)}
-        >
-          {resetStep === 0 ? '🗑️ Nollaa' : resetStep === 1 ? 'Oletko varma?' : 'Hessuniemi ei unohda. Vahvista.'}
+        <button className="btn btn-sm border border-bad/40 bg-bad/10 text-bad hover:bg-bad/20" onClick={() => game.setResetOpen(true)}>
+          🗑️ Nollaa peli
         </button>
       </div>
       {msg && <p className="mt-2 text-xs text-good">{msg}</p>}
