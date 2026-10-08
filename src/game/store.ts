@@ -22,7 +22,12 @@ import { UPGRADE_BY_ID, UPGRADES, type UpgradeKind } from './upgrades';
 const SAVE_KEY = 'hessuniemi-save-v1';
 const SCAN_TIME = 8; // sekuntia ilman parannuksia
 const OFFLINE_CAP = 72 * 3600;
-const BOSS_BASE_HP = 10_000_000;
+const BOSS_BASE_HP = 20_000_000;
+const BOSS_HP_GROWTH = 3;
+const BOSS_SPRINT_MS = 10 * 60 * 1000;
+const BOSS_MAX_DEBTS = 10;
+/** Perfektiopisteen bonus tuotantoon ja korjauspalkkioon. */
+export const PP_BONUS = 0.02;
 
 export interface Toast {
   id: number;
@@ -44,6 +49,7 @@ export interface OfflineReport {
   seconds: number;
   earned: number;
   problems: number;
+  efficiency: number;
 }
 
 function emptyStats(): Stats {
@@ -55,7 +61,7 @@ function emptyStats(): Stats {
 }
 
 function emptyBoss(level = 0): BossState {
-  return { level, active: false, hp: 0, maxHp: 0, debts: [], nextDebtAt: 0, lastThreshold: 1, defeatedScreen: false, totalDamage: 0 };
+  return { level, active: false, hp: 0, maxHp: 0, debts: [], nextDebtAt: 0, endsAt: 0, lastThreshold: 1, defeatedScreen: false, totalDamage: 0 };
 }
 
 export function initialState(): GameState {
@@ -166,8 +172,8 @@ export function globalMult(s: GameState): number {
     const u = UPGRADE_BY_ID[id];
     if (u && u.kind === 'global') m *= 1 + u.value;
   }
-  m *= 1 + 0.03 * s.pp;
-  m *= 1 + 0.01 * (levelOf(xpOf(s)) - 1);
+  m *= 1 + PP_BONUS * s.pp;
+  m *= 1 + 0.005 * (levelOf(xpOf(s)) - 1);
   m *= 1 + 0.01 * s.achievements.length;
   if (s.prestigeLevel >= 4) m *= 1.5;
   if (s.prestigeLevel >= 5) m *= 2;
@@ -179,8 +185,12 @@ export function comboPower(s: GameState): number {
   return 0.5 + sumKind(s, 'comboPower');
 }
 
+/** Combo-bonus: +3 % per taso x10 asti, sen jälkeen logaritmisesti (x100 ≈ +65 %, x500 ≈ +89 %). */
 export function comboMult(s: GameState): number {
-  return s.combo >= 2 ? 1 + comboPower(s) * s.combo : 1;
+  const c = s.combo;
+  if (c < 2) return 1;
+  const bonus = c <= 10 ? 0.03 * c : 0.3 + 0.15 * Math.log(c / 10);
+  return 1 + bonus * (comboPower(s) / 0.5);
 }
 
 export function comboWindow(s: GameState): number {
@@ -210,24 +220,30 @@ export function production(s: GameState): number {
   return prodNoCombo(s) * comboMult(s);
 }
 
+/** Poissaolon tuotanto: 50 %, OSRS Perfect -tasosta alkaen 100 %. */
+export function offlineEfficiency(s: GameState): number {
+  return s.prestigeLevel >= 4 ? 1 : 0.5;
+}
+
 export function detectSpeed(s: GameState): number {
   return (1 + sumKind(s, 'detect')) * (s.prestigeLevel >= 1 ? 2 : 1);
 }
 
 export function clickMult(s: GameState): number {
-  let m = prodKind(s, 'clickMult') * (1 + 0.03 * s.pp);
+  let m = prodKind(s, 'clickMult') * (1 + PP_BONUS * s.pp);
   if (s.prestigeLevel >= 1) m *= 1.25;
   for (const b of s.buffs) m *= b.clickMult;
   return m;
 }
 
 export function clickSeconds(s: GameState): number {
-  return 1 + sumKind(s, 'clickSec');
+  return 0.5 + sumKind(s, 'clickSec');
 }
 
 export function fixReward(s: GameState, p: Problem): number {
-  if (p.tags.includes('meta')) return 50_000 + prodNoCombo(s) * 600;
-  return (p.base + prodNoCombo(s) * clickSeconds(s)) * clickMult(s);
+  if (p.tags.includes('meta')) return 1_000 + prodNoCombo(s) * 300;
+  // Kerroin koskee vain peruspalkkiota; tuotanto-osuus on muutama sekunti, muuten klikkaus ohittaa koko talouden
+  return p.base * clickMult(s) + prodNoCombo(s) * clickSeconds(s);
 }
 
 export function maxTier(s: GameState): number {
@@ -242,8 +258,11 @@ export function maxTier(s: GameState): number {
   return t;
 }
 
+/** Nitpickit, joilla saa ensimmäisen Perfektiopisteen (pisteet = kuutiojuuri). */
+const PP_DIVISOR = 1e10;
+
 export function ppTotalFor(s: GameState): number {
-  return Math.floor(Math.cbrt(s.lifetimeEarned / 1e9)) + s.bonusPP;
+  return Math.floor(Math.cbrt(s.lifetimeEarned / PP_DIVISOR)) + s.bonusPP;
 }
 
 export function ppGain(s: GameState): number {
@@ -252,8 +271,41 @@ export function ppGain(s: GameState): number {
 
 export function nextPPAt(s: GameState): number {
   const base = ppTotalFor(s) - s.bonusPP + 1;
-  return Math.pow(base, 3) * 1e9;
+  return Math.pow(base, 3) * PP_DIVISOR;
 }
+
+// ---------- Boss ----------
+export function bossMaxHp(level: number): number {
+  return BOSS_BASE_HP * Math.pow(BOSS_HP_GROWTH, level);
+}
+
+/** Pelaajan voima bossia vastaan: kasvaa vain Perfektiopisteistä ja prestige-tasosta, ei tuotannosta. */
+export function bossPower(s: GameState): number {
+  return (1 + 0.25 * Math.sqrt(s.pp)) * (1 + 0.1 * s.prestigeLevel);
+}
+
+function debtPenalty(s: GameState): number {
+  return Math.pow(0.85, s.boss.debts.length);
+}
+
+export function bossFixDamage(s: GameState): number {
+  return 20_000 * bossPower(s) * (1 + 0.03 * Math.min(s.combo, 100)) * debtPenalty(s);
+}
+
+export function bossPassiveDps(s: GameState): number {
+  return 2_000 * bossPower(s) * debtPenalty(s);
+}
+
+/** Avoin tekninen velka kerryttää korkoa: jokainen velka parantaa bossia, korko tuplaantuu boss-tasoittain. */
+export function bossHealPerSec(s: GameState): number {
+  return s.boss.debts.length * 4_500 * Math.pow(2, s.boss.level);
+}
+
+export function bossDebtDamage(s: GameState): number {
+  return 8_000 * bossPower(s);
+}
+
+export const BOSS_SPRINT_MINUTES = BOSS_SPRINT_MS / 60_000;
 
 export function bossUnlocked(s: GameState) {
   return s.prestigeLevel >= 2 || s.stats.bossDefeats > 0;
@@ -368,16 +420,18 @@ class Game {
     if (s.event?.type === 'minimal') s.event = null;
     s.buffs = s.buffs.filter((b) => b.endsAt > now);
     if (s.combo > 0 && now - s.comboAt > comboWindow(s) * 1000) s.combo = 0;
+    // Vanhoissa tallennuksissa käynnissä olevalla taistelulla ei ole sprintin päättymisaikaa
+    if (s.boss.active && !s.boss.endsAt) s.boss.endsAt = now + BOSS_SPRINT_MS;
 
     const elapsed = Math.min(OFFLINE_CAP, (now - s.lastSaved) / 1000);
     if (elapsed > 60 && s.lifetimeEarned > 0) {
-      const rate = prodNoCombo(s);
-      const earned = rate * elapsed;
+      const efficiency = offlineEfficiency(s);
+      const earned = prodNoCombo(s) * efficiency * elapsed;
       if (earned > 0) {
         this.earn(earned);
         const problems = Math.max(1, Math.floor((elapsed / SCAN_TIME) * detectSpeed(s) * (1 + Object.values(s.producers).reduce((a, b) => a + b, 0) / 25)));
         s.stats.maxOffline = Math.max(s.stats.maxOffline, elapsed);
-        this.offlineReport = { seconds: elapsed, earned, problems };
+        this.offlineReport = { seconds: elapsed, earned, problems, efficiency };
         this.log('system', `Poissa ${fmtTime(elapsed)}. +${fmt(earned)} Nitpickiä.`);
       }
     }
@@ -548,7 +602,7 @@ class Game {
     }
 
     if (s.boss.active) {
-      this.bossHit(this.bossFixDamage() * (auto ? 0.25 : 1));
+      this.bossHit(bossFixDamage(s) * (auto ? 0.25 : 1));
       if (!auto) audio.play('bosshit');
     }
 
@@ -636,7 +690,7 @@ class Game {
       ['pieni', s.prestigeLevel >= 3 ? 50 : 35],
       ['move', 35],
     ];
-    if (s.runEarned >= 2_000 || s.prestigeLevel > 0) opts.push(['minimal', 30]);
+    if (s.runEarned >= 5_000 || s.prestigeLevel > 0) opts.push(['minimal', 30]);
     const total = opts.reduce((a, o) => a + o[1], 0);
     let r = Math.random() * total;
     let type = opts[0][0];
@@ -698,7 +752,7 @@ class Game {
     const s = this.s;
     const e = s.event;
     if (e?.type !== 'pieni' || e.stage !== 'revealed') return;
-    const reward = (5_000 + prodNoCombo(s) * 90) * prodKind(s, 'pieni') * clickMult(s);
+    const reward = (100 + prodNoCombo(s) * 30) * prodKind(s, 'pieni');
     this.earn(reward);
     s.stats.pieni++;
     s.stats.pxFixes++;
@@ -717,7 +771,7 @@ class Game {
     const e = s.event;
     if (e?.type !== 'minimal') return;
     if (i === e.correct) {
-      const reward = (25_000 + prodNoCombo(s) * 300) * prodKind(s, 'minimal');
+      const reward = (250 + prodNoCombo(s) * 60) * prodKind(s, 'minimal');
       this.earn(reward);
       s.stats.minimal++;
       s.minimalWins++;
@@ -750,7 +804,7 @@ class Game {
     const s = this.s;
     const e = s.event;
     if (e?.type !== 'move') return;
-    const reward = (500 + prodNoCombo(s) * 20) * prodKind(s, 'move') * clickMult(s);
+    const reward = (25 + prodNoCombo(s) * 8) * prodKind(s, 'move');
     this.earn(reward);
     s.stats.moves++;
     s.fixCounts[e.key] = (s.fixCounts[e.key] ?? 0) + 1;
@@ -792,18 +846,18 @@ class Game {
     const r = Math.random();
     const who = pick(['Kermaperse', 'Klaanilainen', 'Raid-kaveri', 'Bank-vastaava']);
     if (r < 0.35) {
-      s.buffs.push({ id: 'raid', name: 'Raid-loot', prodMult: 7, clickMult: 1, endsAt: now + 30_000, duration: 30_000 });
-      this.log('clan', 'PURPLE!! (tuotanto ×7, 30 s)', who);
-      this.toast('good', '🐉', 'Raid-loot: purple', 'Tuotanto ×7 30 sekunnin ajan.');
+      s.buffs.push({ id: 'raid', name: 'Raid-loot', prodMult: 3, clickMult: 1, endsAt: now + 30_000, duration: 30_000 });
+      this.log('clan', 'PURPLE!! (tuotanto ×3, 30 s)', who);
+      this.toast('good', '🐉', 'Raid-loot: purple', 'Tuotanto ×3 30 sekunnin ajan.');
     } else if (r < 0.65) {
-      const lump = Math.max(100, prodNoCombo(s) * 600);
+      const lump = Math.min(s.nitpicks * 0.1, prodNoCombo(s) * 120) + 50;
       this.earn(lump);
       this.log('clan', `bankki järjestetty. Hessu tarkisti. (+${fmt(lump)})`, who);
       this.toast('good', '🏦', 'Bank-ilta', `+${fmt(lump)} Nitpickiä`);
     } else if (r < 0.85) {
-      s.buffs.push({ id: 'quiet', name: 'Hiljainen clan chat', prodMult: 1, clickMult: 10, endsAt: now + 20_000, duration: 20_000 });
+      s.buffs.push({ id: 'quiet', name: 'Hiljainen clan chat', prodMult: 1, clickMult: 5, endsAt: now + 20_000, duration: 20_000 });
       this.log('clan', '…', who);
-      this.toast('good', '🤫', 'Clan chat hiljeni', 'Korjauspalkkio ×10 20 sekunnin ajan.');
+      this.toast('good', '🤫', 'Clan chat hiljeni', 'Korjauksen peruspalkkio ×5 20 sekunnin ajan.');
     } else {
       s.combo += 10;
       s.comboAt = now;
@@ -819,7 +873,7 @@ class Game {
     if (!s.speck) return;
     s.speck = null;
     audio.play('speck');
-    const reward = (100 + prodNoCombo(s) * 15) * clickMult(s);
+    const reward = 20 + prodNoCombo(s) * 10;
     this.earn(reward);
     s.stats.hidden++;
     this.toast('info', '·', 'Kukaan muu ei huomannut.', `Piilossa ollut ongelma korjattu. +${fmt(reward)}`);
@@ -834,16 +888,23 @@ class Game {
   }
 
   // ----- boss -----
-  private bossFixDamage(): number {
-    const s = this.s;
-    return s.boss.maxHp * 0.005 * (1 + 0.1 * s.combo) * (1 + 0.1 * Math.sqrt(s.pp)) * Math.pow(0.85, s.boss.debts.length);
-  }
-
   startBoss() {
     const s = this.s;
     if (!bossUnlocked(s) || s.boss.active) return;
-    const hp = BOSS_BASE_HP * Math.pow(10, s.boss.level);
-    s.boss = { ...s.boss, active: true, hp, maxHp: hp, debts: [], nextDebtAt: Date.now() + 6000, lastThreshold: 1, defeatedScreen: false, totalDamage: 0 };
+    const hp = bossMaxHp(s.boss.level);
+    const now = Date.now();
+    s.boss = {
+      ...s.boss,
+      active: true,
+      hp,
+      maxHp: hp,
+      debts: [],
+      nextDebtAt: now + 5000,
+      endsAt: now + BOSS_SPRINT_MS,
+      lastThreshold: 1,
+      defeatedScreen: false,
+      totalDamage: 0,
+    };
     this.log('boss', '"Ihan hyvä näin."', bossName(s.boss.level));
     this.log('hessu', '"Ei."', 'Hessuniemi');
     this.bossTaunt = { text: 'Ihan hyvä näin.', t: Date.now() };
@@ -861,9 +922,19 @@ class Game {
     this.emit();
   }
 
+  private failBoss() {
+    const s = this.s;
+    s.boss.active = false;
+    s.boss.debts = [];
+    this.log('boss', '"Siirretään seuraavaan sprinttiin."', bossName(s.boss.level));
+    this.toast('bad', '⏱️', 'Sprintti päättyi.', 'Developer selvisi. Tekninen velka jäi. Kokeile uudelleen vahvempana.');
+    audio.play('combobreak');
+    this.speak('Ei. Tämä ei jää tähän.');
+  }
+
   private spawnDebt() {
     const b = this.s.boss;
-    if (b.debts.length >= 8) return;
+    if (b.debts.length >= BOSS_MAX_DEBTS) return;
     const text = pick(DEBT_TEXTS);
     b.debts.push({ uid: this.nextId(), text });
     audio.play('debt');
@@ -878,7 +949,7 @@ class Game {
     b.debts.splice(i, 1);
     s.stats.debtFixed++;
     audio.play('bosshit');
-    this.bossHit(b.maxHp * 0.004);
+    this.bossHit(bossDebtDamage(s));
     this.speak(pick(['Korjattu.', 'Ei.', 'Taas.', 'Kuka tekee näin?']));
     this.emit();
   }
@@ -909,7 +980,7 @@ class Game {
     s.stats.bossDefeats++;
     s.bonusPP += bonus;
     s.pp += bonus;
-    this.earn(prodNoCombo(s) * 3600 + 1e6);
+    this.earn(prodNoCombo(s) * 900);
     this.log('boss', `${bossName(b.level - 1)} DEFEATED. +${bonus} Perfektiopistettä.`);
     audio.play('bossdefeat');
   }
@@ -1013,7 +1084,7 @@ class Game {
 
     // Tapahtumat
     const e = s.event;
-    if (!e && now >= s.nextEventAt && (s.runEarned >= 150 || s.prestigeLevel > 0)) this.spawnEvent();
+    if (!e && now >= s.nextEventAt && (s.runEarned >= 500 || s.prestigeLevel > 0)) this.spawnEvent();
     else if (e) {
       const age = now - e.startedAt;
       if (e.type === 'minimal' && age > 60_000) this.giveUpMinimal();
@@ -1051,11 +1122,13 @@ class Game {
     // Boss
     if (s.boss.active) {
       const b = s.boss;
-      this.bossHit(b.maxHp * 0.0015 * dt * (1 + 0.1 * Math.sqrt(s.pp)) * Math.pow(0.85, b.debts.length));
+      b.hp = Math.min(b.maxHp, b.hp + bossHealPerSec(s) * dt);
+      this.bossHit(bossPassiveDps(s) * dt);
       if (b.active && now >= b.nextDebtAt) {
         this.spawnDebt();
-        b.nextDebtAt = now + rand(7, 11) * 1000;
+        b.nextDebtAt = now + rand(6, 9) * 1000;
       }
+      if (b.active && now >= b.endsAt) this.failBoss();
     }
 
     // Juttelu

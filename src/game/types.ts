@@ -57,6 +57,7 @@ export interface BossState {
   maxHp: number;
   debts: DebtIssue[];
   nextDebtAt: number;
+  endsAt: number;
   lastThreshold: number;
   defeatedScreen: boolean;
   totalDamage: number;

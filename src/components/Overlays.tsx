@@ -56,6 +56,7 @@ export function OfflineModal() {
           Tänä aikana havaittiin <span className="num font-semibold text-ink">{fmt(r.problems)}</span> ongelmaa.
         </p>
         <p>Kukaan muu ei huomannut niitä.</p>
+        {r.efficiency < 1 && <p className="text-xs text-faint">Poissaolon tehokkuus {Math.round(r.efficiency * 100)} %. Hessuniemi ei katso yhtä tarkasti, kun et ole paikalla.</p>}
       </div>
       <div className="num mt-5 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-2xl font-bold text-accent-hi">+{fmt(r.earned)} Nitpickiä</div>
       <div className="mt-5 flex justify-end">

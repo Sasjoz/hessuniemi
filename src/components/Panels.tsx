@@ -5,8 +5,14 @@ import { fmt, fmtDec, fmtRate, fmtTime } from '../game/format';
 import { META_BUGS, metaTierUnlocked, perfection } from '../game/meta';
 import { PRODUCERS, producerCost } from '../game/producers';
 import {
+  BOSS_SPRINT_MINUTES,
+  bossFixDamage,
+  bossHealPerSec,
+  bossMaxHp,
   bossName,
+  bossPassiveDps,
   bossUnlocked,
+  PP_BONUS,
   bug,
   clickMult,
   clickSeconds,
@@ -310,7 +316,7 @@ export function PrestigePanel() {
           {s.prestigeLevel > 0 ? `Taso ${s.prestigeLevel}: ${prestigeName(s.prestigeLevel)}` : 'Ei tasoa'}
         </div>
         <div className="mt-1 text-sm text-muted">
-          Perfektiopisteet: <span className="num text-ink">{fmt(s.pp)}</span> · +{fmt(s.pp * 3)} % tuotantoon ja korjauspalkkioon
+          Perfektiopisteet: <span className="num text-ink">{fmt(s.pp)}</span> · +{fmt(s.pp * PP_BONUS * 100)} % tuotantoon ja korjauspalkkioon
         </div>
         <div className="mt-5 rounded-xl border border-line bg-panel/70 p-4">
           <div className="flex items-center justify-between gap-3">
@@ -383,6 +389,9 @@ export function BossPanel() {
   }
   const pct = b.active ? (b.hp / b.maxHp) * 100 : 100;
   const penalty = Math.round((1 - Math.pow(0.85, b.debts.length)) * 100);
+  const maxHp = b.active ? b.maxHp : bossMaxHp(b.level);
+  const leftSec = b.active ? Math.max(0, Math.ceil((b.endsAt - Date.now()) / 1000)) : BOSS_SPRINT_MINUTES * 60;
+  const clock = `${Math.floor(leftSec / 60)}:${String(leftSec % 60).padStart(2, '0')}`;
   return (
     <div>
       <PanelHeader title="👨‍💻 Hessuniemi vs. Technical Debt" right={`Voitettu ${s.stats.bossDefeats}×`} />
@@ -407,16 +416,25 @@ export function BossPanel() {
           <div className="mb-1 flex justify-between text-xs">
             <span className="text-muted">HP</span>
             <span className="num text-ink">
-              {fmt(b.active ? b.hp : 10_000_000 * Math.pow(10, b.level))} / {fmt(b.active ? b.maxHp : 10_000_000 * Math.pow(10, b.level))}
+              {fmt(b.active ? b.hp : maxHp)} / {fmt(maxHp)}
             </span>
           </div>
           <div className="h-3 overflow-hidden rounded-full border border-line bg-panel">
             <div className="h-full bg-gradient-to-r from-bad/80 to-bad transition-[width] duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+          <Stat label="Sprinttiä jäljellä" value={clock} />
+          <Stat label="Vahinko / korjaus" value={fmt(bossFixDamage(s))} />
+          <Stat label="Passiivinen / s" value={fmt(bossPassiveDps(s))} />
+          <Stat label="Velan korko / s" value={b.active ? `+${fmt(bossHealPerSec(s))}` : '—'} />
+        </div>
         {!b.active ? (
           <div className="mt-5 flex items-center justify-between gap-3">
-            <p className="text-xs text-faint">Jokainen korjattu ongelma tekee vahinkoa. Developer luo uusia ongelmia menettäessään HP:ta.</p>
+            <p className="text-xs leading-relaxed text-faint">
+              Aikaa {BOSS_SPRINT_MINUTES} minuuttia. Jokainen korjattu ongelma tekee vahinkoa, combo kasvattaa sitä. Developer luo teknistä velkaa, joka heikentää vahinkoa ja parantaa häntä korkoa korolle. Voima kasvaa vain
+              Perfektiopisteistä ja prestige-tasosta.
+            </p>
             <button className="btn btn-primary shrink-0" onClick={() => game.startBoss()}>
               ALOITA
             </button>
@@ -520,7 +538,7 @@ export function SettingsPanel() {
     ['Paras combo', `x${fmt(s.stats.bestCombo)}`],
     ['Nitpickit (tämä kierros)', fmt(s.runEarned)],
     ['Nitpickit (kaikki)', fmt(s.lifetimeEarned)],
-    ['Korjauspalkkio', `perus + ${fmtDec(clickSeconds(s), 0)} s tuotantoa`],
+    ['Korjauspalkkio', `perus + ${fmtDec(clickSeconds(s), 1)} s tuotantoa`],
     ['Peliaika', fmtTime(s.stats.playSeconds)],
   ];
 

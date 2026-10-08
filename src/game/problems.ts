@@ -1,4 +1,4 @@
-// Tagit: px = pikselivirhe, remove = tarpeeton elementti (POISTA), regress = synnyttää uuden ongelman, absurd = järjetön
+﻿// Tagit: px = pikselivirhe, remove = tarpeeton elementti (POISTA), regress = synnyttää uuden ongelman, absurd = järjetön
 type Raw = string | [string, string[]];
 
 const T0: Raw[] = [
@@ -189,7 +189,7 @@ export const SEVERITIES: string[][] = [
   ['TODELLINEN'],
 ];
 
-export const TIER_BASE_REWARD = [20, 50, 120, 300, 800, 2_000];
+export const TIER_BASE_REWARD = [8, 20, 50, 125, 300, 800];
 
 export const PIENI_JUTTU: string[] = [
   '#general-kanavan kuvake on 1 pikselin alempana kuin #chat.',

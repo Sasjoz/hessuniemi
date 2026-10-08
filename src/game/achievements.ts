@@ -70,7 +70,7 @@ export const PRESTIGE_LEVELS = [
   { name: 'Pixel Perfect', perk: 'Korjauspalkkio +25 %, havainto 2× nopeampi.' },
   { name: 'UI Perfect', perk: 'The Developer avautuu. Itsetutkiskelu pysyy päällä.' },
   { name: 'Discord Perfect', perk: '"Pieni juttu" -tapahtumia 2× useammin. Combo-ikkuna +1 s.' },
-  { name: 'OSRS Perfect', perk: 'Clan chat -viestejä 2× useammin. Tuotanto +50 %. Itsetutkiskelu II pysyy päällä.' },
+  { name: 'OSRS Perfect', perk: 'Poissaolon tuotanto 100 % (muuten 50 %). Clan chat -viestejä 2× useammin. Tuotanto +50 %. Itsetutkiskelu II pysyy päällä.' },
   { name: 'Kermaperse Perfect', perk: 'Aloitat 100 000 Nitpickillä. Tuotanto +100 %.' },
   { name: 'Todellisuus', perk: 'Hessuniemi alkaa huomata ongelmia itse pelissä.' },
 ];
