@@ -4,7 +4,7 @@ import { fmt, fmtDec } from './game/format';
 import { perfection } from './game/meta';
 import { bossUnlocked, bug, game, levelOf, prestigeName, useGame, xpOf } from './game/store';
 import { ComboBar, Chatbox, EventCard, Hero, mg, ProblemCard } from './components/Main';
-import { RoamingBug } from './components/Minigames';
+import { MiniGameOverlay, RoamingBug } from './components/Minigames';
 import { BossDefeated, ClanBubble, LevelUp, MinimalModal, OfflineModal, ResetModal, Speck, Toasts } from './components/Overlays';
 import { AchievementsPanel, BossPanel, PerfectionPanel, PrestigePanel, ProducersPanel, SettingsPanel, UpgradesPanel, VERSION } from './components/Panels';
 
@@ -108,14 +108,14 @@ export default function App() {
         </div>
 
         <div className="card min-w-0 lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)] lg:flex-col">
-          <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line p-2">
+          <nav className="grid grid-cols-4 gap-1 border-b border-line p-2 sm:flex sm:flex-wrap">
             {tabs.map((t) => {
               const locked = t.id === 'boss' && !bossUnlocked(s);
               return (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors ${
+                  className={`flex min-w-0 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-2.5 sm:text-[13px] ${
                     tab === t.id ? 'bg-panel3 text-ink shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-muted hover:bg-panel3/50 hover:text-ink'
                   } ${t.meta ? mg(t.meta) : ''} ${locked ? 'opacity-50' : ''}`}
                 >
@@ -152,6 +152,7 @@ export default function App() {
 
       <Speck />
       <RoamingBug />
+      <MiniGameOverlay />
       <ClanBubble />
       <Toasts />
       <MinimalModal />

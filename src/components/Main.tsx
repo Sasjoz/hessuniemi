@@ -17,7 +17,6 @@ import {
   xpOf,
 } from '../game/store';
 import { Avatar } from './Avatar';
-import { MiniGameCard } from './Minigames';
 
 export function activeMeta(): string | null {
   const s = game.s;
@@ -57,7 +56,7 @@ export function Hero() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[26px] font-extrabold leading-none tracking-[0.18em] sm:text-[30px]">HESSUNIEMI</h1>
+          <h1 className="text-[22px] font-extrabold leading-none tracking-[0.12em] min-[400px]:text-[26px] min-[400px]:tracking-[0.18em] sm:text-[30px]">HESSUNIEMI</h1>
           <p className={`mt-1.5 text-sm italic text-muted ${mg('ellipsis')}`}>
             "Pieni asia, mutta{bug(s, 'ellipsis') ? '...' : '…'}"
           </p>
@@ -238,7 +237,8 @@ export function EventCard() {
   const s = g.s;
   const e = s.event;
   if (!e || e.type === 'minimal') return null;
-  if (e.type !== 'pieni' && e.type !== 'move') return <MiniGameCard e={e} />;
+  // Minipelit näytetään omana ikkunanaan (MiniGameOverlay)
+  if (e.type !== 'pieni' && e.type !== 'move') return null;
   const radius = bug(s, 'radius') ? 9 : 12;
 
   if (e.type === 'pieni') {

@@ -1,5 +1,5 @@
 import { fmt, fmtTime } from '../game/format';
-import { bossName, game, useGame } from '../game/store';
+import { bossName, game, MINIMAL_BONUS_MS, useGame } from '../game/store';
 import type { MinimalOption } from '../game/types';
 import { Avatar } from './Avatar';
 
@@ -156,6 +156,7 @@ export function MinimalModal() {
   if (e?.type !== 'minimal') return null;
   const left = Math.max(0, 1 - (Date.now() - e.startedAt) / 60_000);
   const diff = e.options[e.correct].diff ?? '';
+  const bonusFrac = Math.max(0, 1 - (Date.now() - e.startedAt) / MINIMAL_BONUS_MS);
   return (
     <div className="fade-in fixed inset-0 z-40 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
       <div className="pop-in card w-full max-w-[560px] border-bad/40 p-6">
@@ -163,6 +164,15 @@ export function MinimalModal() {
           <div className="text-xs font-bold uppercase tracking-[0.2em] text-bad">⚠️ Minimaalinen virhe havaittu</div>
           <h3 className="mt-2 text-xl font-bold">Kaikki tuotanto on pysähtynyt.</h3>
           <p className="mt-1 text-sm text-muted">Yksi näistä on erilainen. Hessuniemi tietää mikä.</p>
+          <p className={`mt-2 text-xs ${bonusFrac > 0 ? 'text-gold' : 'text-faint'}`}>
+            {bonusFrac > 0 ? (
+              <>
+                Nopeusbonus <span className="num font-semibold">+{Math.round(bonusFrac * 200)} %</span> · {Math.ceil((bonusFrac * MINIMAL_BONUS_MS) / 1000)} s
+              </>
+            ) : (
+              'Nopeusbonus menetetty.'
+            )}
+          </p>
         </div>
         <div className="my-7 flex flex-wrap items-start justify-center gap-3">
           {e.options.map((o, i) => {

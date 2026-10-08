@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+﻿import { useSyncExternalStore } from 'react';
 import { ACHIEVEMENTS, PRESTIGE_LEVELS } from './achievements';
 import { audio } from './audio';
 import { fmt, fmtTime, pick, rand } from './format';
@@ -16,7 +16,7 @@ import {
   TIER_BASE_REWARD,
 } from './problems';
 import { maxAffordable, PRODUCER_BY_ID, PRODUCERS, producerCost } from './producers';
-import { makeOrder, makeTypo, ODD_AMOUNTS, ODD_ICONS, TYPO_SENTENCES } from './minigames';
+import { makeOrder, makeTypo, MINI_BASE_FLAT, MINI_LIMITS, MINI_SECONDS, type MiniType, ODD_AMOUNTS, ODD_ICONS, SPEED_BONUS_MAX, speedBonusFraction, TYPO_SENTENCES } from './minigames';
 import type { BossState, GameEvent, GameState, LogEntry, MinimalDiff, MinimalOption, OddMode, Problem, Stats } from './types';
 import { UPGRADE_BY_ID, UPGRADES, type UpgradeKind } from './upgrades';
 
@@ -27,6 +27,8 @@ const BOSS_BASE_HP = 20_000_000;
 const BOSS_HP_GROWTH = 3;
 const BOSS_SPRINT_MS = 10 * 60 * 1000;
 const BOSS_MAX_DEBTS = 10;
+/** Minimaalisen virheen nopeusbonuksen aikaikkuna. */
+export const MINIMAL_BONUS_MS = 30_000;
 /** Perfektiopisteen bonus tuotantoon ja korjauspalkkioon. */
 export const PP_BONUS = 0.02;
 
@@ -220,6 +222,21 @@ export function prodNoCombo(s: GameState): number {
 export function production(s: GameState): number {
   if (isPaused(s)) return 0;
   return prodNoCombo(s) * comboMult(s);
+}
+
+/** Minipelin peruspalkkio ilman nopeusbonusta. */
+export function miniBaseReward(s: GameState, type: MiniType): number {
+  return MINI_BASE_FLAT + prodNoCombo(s) * MINI_SECONDS[type];
+}
+
+/** Palkkio, jonka minipelistä saisi juuri nyt (perus + nopeusbonus). */
+export function miniRewardNow(s: GameState): { base: number; bonus: number; frac: number } | null {
+  const e = s.event;
+  if (!e || !(e.type in MINI_LIMITS)) return null;
+  const type = e.type as MiniType;
+  const base = miniBaseReward(s, type);
+  const frac = speedBonusFraction(e.startedAt, MINI_LIMITS[type]);
+  return { base, bonus: base * SPEED_BONUS_MAX * frac, frac };
 }
 
 /** Poissaolon tuotanto: 50 %, OSRS Perfect -tasosta alkaen 100 %. */
@@ -760,22 +777,35 @@ class Game {
     this.speak('Mikä on erilainen?');
   }
 
-  /** Yhteinen lopetus minipeleille. */
-  private finishMini(ok: boolean, seconds: number, title: string, text: string) {
+  /** Yhteinen lopetus minipeleille. Onnistuminen antaa peruspalkkion ja jäljellä olevan ajan mukaisen nopeusbonuksen. */
+  private finishMini(ok: boolean, title: string, text: string) {
     const s = this.s;
+    const e = s.event;
     s.event = null;
     this.scheduleEvent();
-    if (ok) {
-      const reward = 150 + prodNoCombo(s) * seconds;
-      this.earn(reward);
-      this.toast('good', '✓', title, `${text} +${fmt(reward)} Nitpickiä`);
-      this.log('event', `${title} +${fmt(reward)}`);
+    if (ok && e && e.type in MINI_LIMITS) {
+      const type = e.type as MiniType;
+      const base = miniBaseReward(s, type);
+      const frac = speedBonusFraction(e.startedAt, MINI_LIMITS[type]);
+      const bonus = base * SPEED_BONUS_MAX * frac;
+      this.earn(base + bonus);
+      const bonusText = bonus > 0 ? ` (nopeusbonus +${fmt(bonus)})` : '';
+      this.toast('good', '✓', title, `${text} +${fmt(base + bonus)} Nitpickiä${bonusText}`);
+      this.log('event', `${title} +${fmt(base + bonus)}${bonusText}`);
+      if (frac > 0.6) this.speak(pick(['Nopeasti. Hyvä.', 'Tuo oli nopea.', 'Ennen kuin kukaan muu huomasi.']));
       audio.play('correct');
     } else {
       this.toast('bad', '…', title, text);
       this.log('event', title);
       audio.play('combobreak');
     }
+  }
+
+  skipMini() {
+    const e = this.s.event;
+    if (!e || !(e.type in MINI_LIMITS)) return;
+    this.finishMini(false, 'Jätettiin väliin.', 'Hessuniemi ei sano mitään. Se on pahempaa.');
+    this.emit();
   }
 
   // ----- Pakeneva bugi -----
@@ -807,7 +837,7 @@ class Game {
     if (s.event?.type !== 'bug') return;
     s.stats.bugs++;
     this.speak(pick(['Sain sen.', 'Ei enää.', 'Korjattu. Ennen tuotantoa.']));
-    this.finishMini(true, 40, '🐛 Bugi kiinni', 'Se ei päässyt tuotantoon.');
+    this.finishMini(true, '🐛 Bugi kiinni', 'Se ei päässyt tuotantoon.');
     this.emit();
   }
 
@@ -819,12 +849,12 @@ class Game {
     if (i === e.correct) {
       s.stats.odd++;
       this.speak('Tuo. Selvästi.');
-      this.finishMini(true, 45, '✓ Löysit erilaisen', 'Hessuniemi nyökkää. Hieman.');
+      this.finishMini(true, '✓ Löysit erilaisen', 'Hessuniemi nyökkää. Hieman.');
     } else if (!e.wrong.includes(i)) {
       e.wrong.push(i);
       audio.play('wrong');
       this.speak(pick(['Ei.', 'Se on täsmälleen samanlainen.', 'Katso tarkemmin.']));
-      if (e.wrong.length >= 3) this.finishMini(false, 0, 'Liian monta arvausta.', 'Hessuniemi osoitti oikean. Sanaakaan sanomatta.');
+      if (e.wrong.length >= 3) this.finishMini(false, 'Liian monta arvausta.', 'Hessuniemi osoitti oikean. Sanaakaan sanomatta.');
     }
     this.emit();
   }
@@ -846,12 +876,12 @@ class Game {
       s.stats.aligned++;
       s.stats.pxFixes++;
       this.speak('Nyt se on linjassa.');
-      this.finishMini(true, 30, '📐 Kohdistettu', 'Täsmälleen 0 px.');
+      this.finishMini(true, '📐 Kohdistettu', 'Täsmälleen 0 px.');
     } else {
       e.misses++;
       audio.play('wrong');
       this.speak(Math.abs(e.offset) === 1 ? 'Vielä 1 px.' : 'Ei. Vielä vähän.');
-      if (e.misses >= 3) this.finishMini(false, 0, 'Hessuniemi kohdisti sen itse.', `Se oli ${Math.abs(e.offset)} px pielessä.`);
+      if (e.misses >= 3) this.finishMini(false, 'Hessuniemi kohdisti sen itse.', `Se oli ${Math.abs(e.offset)} px pielessä.`);
     }
     this.emit();
   }
@@ -867,7 +897,7 @@ class Game {
       if (e.progress >= e.solution.length) {
         s.stats.ordered++;
         this.speak('Järjestyksessä. Toistaiseksi.');
-        this.finishMini(true, 50, e.mode === 'alpha' ? '💬 Kanavat järjestetty' : '📈 XP-dropit järjestetty', 'Joku siirtää ne kuitenkin huomenna.');
+        this.finishMini(true, e.mode === 'alpha' ? '💬 Kanavat järjestetty' : '📈 XP-dropit järjestetty', 'Joku siirtää ne kuitenkin huomenna.');
       }
     } else {
       e.misses++;
@@ -875,7 +905,7 @@ class Game {
       e.flash = Date.now();
       audio.play('wrong');
       this.speak('Ei. Alusta.');
-      if (e.misses >= 4) this.finishMini(false, 0, 'Järjestys jäi kesken.', 'Kanavat ovat edelleen väärässä järjestyksessä. Kaikki tietävät.');
+      if (e.misses >= 4) this.finishMini(false, 'Järjestys jäi kesken.', 'Kanavat ovat edelleen väärässä järjestyksessä. Kaikki tietävät.');
     }
     this.emit();
   }
@@ -888,12 +918,12 @@ class Game {
     if (i === e.typoIndex) {
       s.stats.typos++;
       this.speak(`"${e.correctWord}". Noin.`);
-      this.finishMini(true, 35, '✍️ Kirjoitusvirhe korjattu', `"${e.words[i]}" → "${e.correctWord}".`);
+      this.finishMini(true, '✍️ Kirjoitusvirhe korjattu', `"${e.words[i]}" → "${e.correctWord}".`);
     } else if (!e.wrong.includes(i)) {
       e.wrong.push(i);
       audio.play('wrong');
       this.speak('Tuo on kirjoitettu oikein.');
-      if (e.wrong.length >= 3) this.finishMini(false, 0, 'Kirjoitusvirhe jäi.', `Se oli "${e.words[e.typoIndex]}".`);
+      if (e.wrong.length >= 3) this.finishMini(false, 'Kirjoitusvirhe jäi.', `Se oli "${e.words[e.typoIndex]}".`);
     }
     this.emit();
   }
@@ -955,14 +985,17 @@ class Game {
     const e = s.event;
     if (e?.type !== 'minimal') return;
     if (i === e.correct) {
-      const reward = (250 + prodNoCombo(s) * 60) * prodKind(s, 'minimal');
+      const base = (250 + prodNoCombo(s) * 60) * prodKind(s, 'minimal');
+      const bonus = base * SPEED_BONUS_MAX * speedBonusFraction(e.startedAt, MINIMAL_BONUS_MS);
+      const reward = base + bonus;
       this.earn(reward);
       s.stats.minimal++;
       s.minimalWins++;
       s.event = null;
       this.scheduleEvent();
-      this.toast('good', '✓', 'Hessuniemi hyväksyy tämän.', `+${fmt(reward)} Nitpickiä`);
-      this.log('event', `Minimaalinen virhe löydetty. +${fmt(reward)}`);
+      const bonusText = bonus > 0 ? ` (nopeusbonus +${fmt(bonus)})` : '';
+      this.toast('good', '✓', 'Hessuniemi hyväksyy tämän.', `+${fmt(reward)} Nitpickiä${bonusText}`);
+      this.log('event', `Minimaalinen virhe löydetty. +${fmt(reward)}${bonusText}`);
       this.speak('Hyväksyn tämän.');
       audio.play('correct');
     } else if (!e.wrong.includes(i)) {
@@ -1279,11 +1312,10 @@ class Game {
       }
       if (e.type === 'move' && age > 60_000) this.dismissMove();
       if (e.type === 'bug') {
-        if (age > 15_000) this.finishMini(false, 0, '🐛 Bugi pakeni.', 'Se on nyt tuotannossa. Hessuniemi tietää missä.');
+        if (age > MINI_LIMITS.bug) this.finishMini(false, '🐛 Bugi pakeni.', 'Se on nyt tuotannossa. Hessuniemi tietää missä.');
         else if (now >= e.nextMoveAt) this.moveBug(e);
-      }
-      if ((e.type === 'odd' || e.type === 'align' || e.type === 'order' || e.type === 'typo') && age > 45_000) {
-        this.finishMini(false, 0, 'Aika loppui.', 'Hessuniemi korjasi sen itse. Huokaisten.');
+      } else if (e.type in MINI_LIMITS && age > MINI_LIMITS[e.type as MiniType]) {
+        this.finishMini(false, '⏱️ Aika loppui.', 'Hessuniemi korjasi sen itse. Huokaisten.');
       }
     }
 

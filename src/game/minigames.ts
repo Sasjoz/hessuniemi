@@ -1,5 +1,21 @@
 import { fmt, pick } from './format';
 
+/** Minipelien aikarajat (ms). Mitä nopeammin ratkaisee, sitä suurempi nopeusbonus. */
+export const MINI_LIMITS = { bug: 12_000, odd: 15_000, align: 20_000, order: 20_000, typo: 15_000 } as const;
+export type MiniType = keyof typeof MINI_LIMITS;
+
+/** Peruspalkkio sekunteina tuotantoa. */
+export const MINI_SECONDS: Record<MiniType, number> = { bug: 40, odd: 45, align: 30, order: 50, typo: 35 };
+
+export const MINI_BASE_FLAT = 150;
+
+/** Nopeusbonus kertoimena peruspalkkioon: täysi bonus (+200 %) heti, nolla aikarajalla. */
+export const SPEED_BONUS_MAX = 2;
+
+export function speedBonusFraction(startedAt: number, limitMs: number, now = Date.now()): number {
+  return Math.max(0, 1 - (now - startedAt) / limitMs);
+}
+
 // ---------- "Mikä on erilainen?" ----------
 export const ODD_ICONS = ['🔎', '🐛', '💬', '🧈', '📐', '🛡️', '🐉', '🏦', '🗺️', '🧪'];
 
