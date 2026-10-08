@@ -1,0 +1,276 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #0b0d12;
+  --color-panel: #12151d;
+  --color-panel2: #171b25;
+  --color-panel3: #1d2230;
+  --color-line: #232839;
+  --color-line2: #2e3448;
+  --color-accent: #748bd9;
+  --color-accent-hi: #8fa3e6;
+  --color-accent-lo: #3e4c80;
+  --color-ink: #e4e7f0;
+  --color-muted: #8b91a6;
+  --color-faint: #5b6178;
+  --color-gold: #d8c27c;
+  --color-good: #82c49c;
+  --color-bad: #d98080;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-pixel: 'Pixelify Sans', 'Inter', sans-serif;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 15% -10%, rgb(116 139 217 / 0.09), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgb(116 139 217 / 0.05), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Meta-virheet: teemoitettu vierityspalkki ja valintaväri vasta korjauksen jälkeen */
+html.fix-scrollbar {
+  scrollbar-color: #2e3448 #0b0d12;
+}
+html.fix-scrollbar ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html.fix-scrollbar ::-webkit-scrollbar-track {
+  background: #0b0d12;
+}
+html.fix-scrollbar ::-webkit-scrollbar-thumb {
+  background: #2e3448;
+  border-radius: 6px;
+}
+html.fix-selection ::selection {
+  background: rgb(116 139 217 / 0.45);
+  color: #fff;
+}
+
+.card {
+  background: linear-gradient(180deg, var(--color-panel2), var(--color-panel));
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 10px 30px -18px rgb(0 0 0 / 0.8);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 10px 18px;
+  border-radius: 9px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  transition: transform 80ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms;
+  user-select: none;
+  cursor: pointer;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: #0d1020;
+  border: 1px solid var(--color-accent-hi);
+  box-shadow: 0 6px 20px -8px rgb(116 139 217 / 0.6);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-hi);
+}
+.btn-ghost {
+  background: var(--color-panel3);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line2);
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--color-accent-lo);
+  background: #222838;
+}
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.pixel {
+  font-family: var(--font-pixel);
+}
+
+/* Aktiivisen meta-virheen korostus */
+.meta-glow {
+  outline: 1px dashed rgb(116 139 217 / 0.9);
+  outline-offset: 3px;
+  animation: metaPulse 1.2s ease-in-out infinite;
+}
+@keyframes metaPulse {
+  50% {
+    outline-color: rgb(116 139 217 / 0.25);
+  }
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -48px);
+  }
+}
+.floater {
+  animation: floatUp 1.3s ease-out forwards;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pop-in {
+  animation: popIn 220ms ease-out both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+.fade-in {
+  animation: fadeIn 200ms ease-out both;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+.toast-in {
+  animation: toastIn 240ms ease-out both;
+}
+
+@keyframes bob {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.bob {
+  animation: bob 2.4s ease-in-out infinite;
+}
+
+@keyframes shake {
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(1px);
+  }
+}
+.shake {
+  animation: shake 300ms ease-in-out;
+}
+
+@keyframes scanline {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+.scan-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.18), transparent);
+  animation: scanline 1.6s linear infinite;
+}
+
+@keyframes speckPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.speck {
+  animation: speckPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.bubble-in {
+  animation: bubbleIn 300ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* OSRS-henkinen chatbox */
+.chatbox {
+  background: linear-gradient(180deg, #14171f, #101219);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
